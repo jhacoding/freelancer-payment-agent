@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Freelancer Payment Agent</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1a1d21;--muted:#6b7280;--line:#e5e7eb;--accent:#0b5fff;--ok:#16794c;--warn:#b45309;--bad:#b42318}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--text:#e8eaed;--muted:#9aa3af;--line:#262b35;--accent:#5b9bff;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:16px 24px;border-bottom:1px solid var(--line);background:var(--card)}
+header h1{margin:0;font-size:18px}
+header p{margin:2px 0 0;color:var(--muted);font-size:13px}
+main{max-width:1200px;margin:0 auto;padding:20px;display:grid;gap:16px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.stat .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.stat .value{font-size:24px;font-weight:650;margin-top:4px}
+.cols{display:grid;grid-template-columns:minmax(300px,380px) 1fr;gap:16px}
+@media(max-width:860px){.cols{grid-template-columns:1fr}}
+h2{margin:0 0 12px;font-size:15px}
+#chat{height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding-right:4px}
+.msg{padding:8px 12px;border-radius:12px;max-width:88%;white-space:pre-wrap}
+.msg.user{align-self:flex-end;background:var(--accent);color:#fff}
+.msg.ai{align-self:flex-start;background:var(--bg);border:1px solid var(--line)}
+.row{display:flex;gap:8px;margin-top:12px}
+input[type=text]{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit}
+button{padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--text);font:inherit;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.proposal{align-self:stretch;border:1px solid var(--accent);border-radius:12px;padding:12px;background:var(--bg)}
+.proposal dl{margin:8px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
+.proposal dt{color:var(--muted)}
+.proposal dd{margin:0}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:500;font-size:12px;text-transform:uppercase}
+.badge{padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid currentColor}
+.b-paid{color:var(--ok)}.b-sent{color:var(--accent)}.b-over{color:var(--bad)}
+td button{padding:4px 8px;font-size:12px;margin-right:4px}
+.bars{display:flex;align-items:flex-end;gap:12px;height:110px;margin-top:8px}
+.bar{flex:1;max-width:80px;background:var(--accent);border-radius:6px 6px 0 0;min-height:4px;position:relative}
+.bar span{position:absolute;top:-20px;left:0;right:0;text-align:center;font-size:12px}
+.bar small{position:absolute;bottom:-20px;left:0;right:0;text-align:center;color:var(--muted);font-size:11px}
+#summary{margin-top:28px;white-space:pre-wrap}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--text);max-width:520px;width:92%}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+#toasts{position:fixed;right:16px;bottom:16px;display:grid;gap:8px;z-index:10}
+.toast{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);padding:10px 14px;border-radius:8px;max-width:360px;box-shadow:0 4px 14px rgba(0,0,0,.2)}
+.toast.err{border-left-color:var(--bad)}
+.muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>AI Freelancer Payment Agent</h1>
+  <p>Describe finished work, approve the invoice, and the agent handles PayPal, payment tracking and reminders.</p>
+</header>
+<main>
+  <section class="stats">
+    <div class="card stat"><div class="label">Paid this month</div><div class="value" id="s-paid">$0.00</div></div>
+    <div class="card stat"><div class="label">Outstanding</div><div class="value" id="s-out">$0.00</div></div>
+    <div class="card stat"><div class="label">Overdue invoices</div><div class="value" id="s-over">0</div></div>
+  </section>
+
+  <section class="cols">
+    <div class="card">
+      <h2>Chat with your agent</h2>
+      <div id="chat"></div>
+      <div class="row">
+        <input type="text" id="input" placeholder="I completed a ₹40,000 website project for ABC." autocomplete="off">
+        <button class="primary" id="send">Send</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Invoices <span class="muted" style="font-weight:400;font-size:12px">(status refreshes automatically)</span></h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Client</th><th>Amount</th><th>Status</th><th>Due</th><th>Actions</th></tr></thead>
+          <tbody id="rows"><tr><td colspan="6" class="muted">No invoices yet.</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Earnings</h2>
+    <div class="bars" id="bars"></div>
+    <div class="row" style="margin-top:32px">
+      <button id="sum-btn">Generate AI monthly summary</button>
+    </div>
+    <div id="summary" class="muted"></div>
+  </section>
+</main>
+
+<dialog id="rem">
+  <h2 id="rem-title">Reminder draft</h2>
+  <p class="muted" id="rem-meta"></p>
+  <p><strong id="rem-subject"></strong></p>
+  <p id="rem-note" style="white-space:pre-wrap"></p>
+  <div class="row" style="justify-content:flex-end">
+    <button id="rem-cancel">Cancel</button>
+    <button class="primary" id="rem-send">Send reminder</button>
+  </div>
+</dialog>
+<div id="toasts"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const CLOSED = ["PAID","MARKED_AS_PAID","CANCELLED","REFUNDED","MARKED_AS_REFUNDED"];
+let history = [];
+let draftId = null;
+
+async function api(path, method = "GET", body) {
+  const r = await fetch(path, {
+    method,
+    headers: {"Content-Type": "application/json"},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+function toast(msg, isErr = false) {
+  const t = document.createElement("div");
+  t.className = "toast" + (isErr ? " err" : "");
+  t.textContent = msg;
+  $("#toasts").appendChild(t);
+  setTimeout(() => t.remove(), 7000);
+}
+
+// ---------- Chat ----------
+function addMsg(role, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + role;
+  d.textContent = text;
+  $("#chat").appendChild(d);
+  $("#chat").scrollTop = $("#chat").scrollHeight;
+  return d;
+}
+
+async function sendMessage() {
+  const text = $("#input").value.trim();
+  if (!text) return;
+  $("#input").value = "";
+  addMsg("user", text);
+  history.push({role: "user", content: text});
+  const thinking = addMsg("ai", "Thinking…");
+  try {
+    const res = await api("/api/chat", "POST", {history});
+    thinking.remove();
+    if (res.type === "proposal") {
+      history = [];
+      showProposal(res);
+    } else {
+      addMsg("ai", res.text);
+      history.push({role: "assistant", content: res.text});
+    }
+  } catch (e) {
+    thinking.textContent = "Error: " + e.message;
+  }
+}
+
+function showProposal(res) {
+  const i = res.invoice;
+  const box = document.createElement("div");
+  box.className = "proposal";
+  box.innerHTML = `
+    <strong>Invoice preview</strong>
+    <dl>
+      <dt>Client</dt><dd>${esc(i.client_name)}</dd>
+      <dt>Work</dt><dd>${esc(i.description)}</dd>
+      <dt>Amount</dt><dd>${esc(i.currency)} ${Number(i.amount).toLocaleString()} (≈ USD ${esc(i.usd_amount)})</dd>
+      <dt>Due in</dt><dd>${esc(i.due_in_days)} days</dd>
+    </dl>
+    <div class="row" style="margin-top:8px">
+      <button class="primary">Approve and send</button>
+      <button>Cancel</button>
+    </div>`;
+  const [approve, cancel] = box.querySelectorAll("button");
+  approve.onclick = async () => {
+    approve.disabled = cancel.disabled = true;
+    approve.textContent = "Sending…";
+    try {
+      const out = await api(`/api/proposals/${res.proposal_id}/approve`, "POST");
+      box.innerHTML = `<strong>Sent to ${esc(i.client_name)} through PayPal.</strong><br><span class="muted">Status: ${esc(out.status)}</span>`;
+      refresh();
+    } catch (e) {
+      box.innerHTML = `<strong>Could not send.</strong><br><span class="muted">${esc(e.message)}</span>`;
+    }
+  };
+  cancel.onclick = async () => {
+    await api(`/api/proposals/${res.proposal_id}/cancel`, "POST");
+    box.innerHTML = `<span class="muted">Cancelled. Nothing was sent.</span>`;
+  };
+  $("#chat").appendChild(box);
+  $("#chat").scrollTop = $("#chat").scrollHeight;
+}
+
+// ---------- Invoices ----------
+function statusBadge(r) {
+  if (["PAID","MARKED_AS_PAID"].includes(r.status)) return `<span class="badge b-paid">Paid</span>`;
+  if (r.days_overdue > 0) return `<span class="badge b-over">Overdue ${r.days_overdue}d</span>`;
+  return `<span class="badge b-sent">${esc(r.status)}</span>`;
+}
+
+async function loadInvoices() {
+  const rows = await api("/api/invoices");
+  if (!rows.length) {
+    $("#rows").innerHTML = `<tr><td colspan="6" class="muted">No invoices yet.</td></tr>`;
+    return;
+  }
+  $("#rows").innerHTML = rows.map(r => {
+    const open = !CLOSED.includes(r.status);
+    return `<tr>
+      <td>${esc(r.invoice_number)}</td>
+      <td>${esc(r.client_name)}</td>
+      <td>${esc(r.currency)} ${Number(r.amount).toLocaleString()}<br><span class="muted">USD ${esc(r.usd_amount)}</span></td>
+      <td>${statusBadge(r)}</td>
+      <td>${esc(r.due_date || "")}</td>
+      <td>
+        ${r.pay_url ? `<a href="${esc(r.pay_url)}" target="_blank" rel="noopener"><button>Pay link</button></a>` : ""}
+        ${open ? `<button data-act="overdue" data-id="${esc(r.invoice_id)}">Demo: make overdue</button>` : ""}
+        ${open && r.days_overdue > 0 ? `<button class="primary" data-act="remind" data-id="${esc(r.invoice_id)}">AI reminder</button>` : ""}
+      </td></tr>`;
+  }).join("");
+}
+
+$("#rows").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-act]");
+  if (!b) return;
+  const id = b.dataset.id;
+  try {
+    if (b.dataset.act === "overdue") {
+      const days = parseInt(prompt("Make this invoice how many days overdue?", "10"), 10);
+      if (!days) return;
+      await api(`/api/invoices/${id}/simulate-overdue`, "POST", {days});
+      refresh();
+    } else if (b.dataset.act === "remind") {
+      b.disabled = true; b.textContent = "Writing…";
+      const d = await api(`/api/invoices/${id}/reminder-draft`, "POST");
+      draftId = d.draft_id;
+      $("#rem-meta").textContent = `${d.days} days overdue · tone: ${d.tone}`;
+      $("#rem-subject").textContent = d.subject;
+      $("#rem-note").textContent = d.note;
+      $("#rem").showModal();
+      refresh();
+    }
+  } catch (err) { toast(err.message, true); refresh(); }
+});
+
+$("#rem-cancel").onclick = () => $("#rem").close();
+$("#rem-send").onclick = async () => {
+  try {
+    await api(`/api/reminders/${draftId}/send`, "POST");
+    toast("Reminder sent through PayPal.");
+  } catch (e) { toast(e.message, true); }
+  $("#rem").close();
+};
+
+// ---------- Stats, earnings, summary ----------
+async function loadStats() {
+  const s = await api("/api/stats");
+  $("#s-paid").textContent = "$" + s.paid_total_usd.toFixed(2);
+  $("#s-out").textContent = "$" + s.outstanding_total_usd.toFixed(2);
+  $("#s-over").textContent = s.overdue.length;
+  const e = await api("/api/earnings");
+  const max = Math.max(1, ...Object.values(e));
+  $("#bars").innerHTML = Object.keys(e).length
+    ? Object.entries(e).map(([m, v]) =>
+        `<div class="bar" style="height:${Math.max(4, v / max * 100)}%"><span>$${v}</span><small>${esc(m)}</small></div>`).join("")
+    : `<span class="muted">No payments received yet.</span>`;
+}
+
+$("#sum-btn").onclick = async () => {
+  $("#summary").textContent = "Writing summary…";
+  try { $("#summary").textContent = (await api("/api/summary")).text; }
+  catch (e) { $("#summary").textContent = "Error: " + e.message; }
+};
+
+// ---------- Refresh and auto payment tracking ----------
+async function refresh() { await Promise.all([loadInvoices(), loadStats()]); }
+
+async function syncNow() {
+  try {
+    const paid = await api("/api/sync", "POST");
+    paid.forEach(p => toast(p.message));
+    if (paid.length) refresh();
+  } catch (e) { /* ignore transient errors */ }
+}
+
+$("#send").onclick = sendMessage;
+$("#input").addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
+addMsg("ai", "Hi! Tell me about work you've finished, for example: \"I completed a ₹40,000 website project for ABC.\"");
+refresh();
+syncNow();
+setInterval(() => { syncNow(); loadInvoices(); }, 20000);
+</script>
+</body>
+</html>
