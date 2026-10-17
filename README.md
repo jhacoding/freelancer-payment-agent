@@ -5,7 +5,8 @@ An AI agent that handles the money side of freelancing. Describe finished work i
 Built for the **Build What's Next with PayPal and AI** hackathon.
 
 **Demo video:** [YouTube link]
-**Live demo:** [Render URL, if deployed]
+**Live demo:** [https://freelancer-payment-agent.onrender.com/]
+“Hosted on a free tier: the first load can take about a minute, and demo data resets when the server restarts.”
 
 ## The problem
 
